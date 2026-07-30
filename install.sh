@@ -514,7 +514,7 @@ EOF
 #  RUN
 # ═══════════════════════════════════════════════════════════
 
-if [[ "$1" == "--menu" ]]; then
+if [[ "${1:-}" == "--menu" ]]; then
     create_karpanel_cmd
     bash "$KARPANEL_CMD" menu
     exit 0
