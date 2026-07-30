@@ -1,9 +1,7 @@
-# -*- coding: utf-8 -*-
-# ماژول آنالیز و گزارش‌گیری هوشمند
-
-import json, os, re
+import os, re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
+import database as db
 
 STOP_WORDS = set(
     "و یا به از که با را این آن در برای یک است شد شود می های تا اما "
@@ -15,51 +13,35 @@ STOP_WORDS = set(
 class Analytics:
     def __init__(self, log_file="data/messages_log.json"):
         self.log_file = log_file
-        self._ensure_file()
 
     def _ensure_file(self):
-        os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
-        if not os.path.exists(self.log_file):
-            self._save([])
+        pass
 
     def _load(self):
-        try:
-            with open(self.log_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return []
+        return db.get_all_messages_db(limit=100000)
 
     def _save(self, data):
-        with open(self.log_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        pass
 
     def log_message(self, user_id, first_name, text, timestamp=None):
         if not text or not text.strip():
             return
-        messages = self._load()
-        messages.append({
-            "user_id": user_id, "first_name": first_name,
-            "text": text.strip(), "timestamp": timestamp or datetime.now().isoformat()
-        })
-        self._save(messages)
+        db.log_message_db(
+            user_id, first_name, text.strip(),
+            timestamp or datetime.now().isoformat()
+        )
 
     def log_contact(self, user_id, first_name, phone_number):
-        messages = self._load()
-        messages.append({
-            "user_id": user_id, "first_name": first_name,
-            "text": f"[اشتراک شماره تماس] {phone_number}",
-            "timestamp": datetime.now().isoformat(), "type": "contact"
-        })
-        self._save(messages)
+        db.log_message_db(
+            user_id, first_name, f"[اشتراک شماره تماس] {phone_number}",
+            datetime.now().isoformat(), type_="contact"
+        )
 
     def log_admin_reply(self, user_id, first_name, text):
-        messages = self._load()
-        messages.append({
-            "user_id": user_id, "first_name": first_name,
-            "text": text.strip(), "timestamp": datetime.now().isoformat(),
-            "type": "admin_reply", "direction": "outgoing"
-        })
-        self._save(messages)
+        db.log_message_db(
+            user_id, first_name, text.strip(),
+            datetime.now().isoformat(), type_="admin_reply", direction="outgoing"
+        )
 
     def _extract_keywords(self, text):
         words = re.sub(r"[^\w\s]", " ", text).split()
@@ -67,21 +49,17 @@ class Analytics:
         return Counter(words).most_common(50)
 
     def get_all_messages(self, limit=200, offset=0):
-        messages = self._load()
-        messages.sort(key=lambda m: m.get("timestamp", ""), reverse=True)
-        return messages[offset:offset + limit]
+        return db.get_all_messages_db(limit=limit, offset=offset)
 
     def get_user_conversation(self, user_id):
-        messages = self._load()
-        conv = [m for m in messages if str(m.get("user_id")) == str(user_id)]
-        conv.sort(key=lambda m: m.get("timestamp", ""))
-        return conv
+        return db.get_user_conversation_db(user_id)
 
     def get_daily_stats(self, date_str=None):
         if date_str is None:
             date_str = datetime.now().date().isoformat()
-        messages = self._load()
-        day_msgs = [m for m in messages if m["timestamp"].startswith(date_str)]
+        start = date_str
+        end = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).isoformat()
+        day_msgs = db.get_messages_in_date_range(start, end)
         if not day_msgs:
             return {"date": date_str, "total_messages": 0, "unique_users": 0, "contacts_shared": 0, "user_counts": {}, "top_keywords": []}
         users = set(str(m["user_id"]) for m in day_msgs)
@@ -99,8 +77,7 @@ class Analytics:
         today = datetime.now()
         week_ago = today - timedelta(days=7)
         week_start = week_ago.isoformat()
-        messages = self._load()
-        week_msgs = [m for m in messages if m["timestamp"] >= week_start]
+        week_msgs = db.get_messages_in_date_range(week_start)
         if not week_msgs:
             return {"period": f"{week_ago.date()} تا {today.date()}", "total_messages": 0, "unique_users": 0, "daily_breakdown": {}, "top_keywords": [], "active_users": []}
         daily = defaultdict(list)

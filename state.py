@@ -1,9 +1,5 @@
-# -*- coding: utf-8 -*-
-# ماشین وضعیت (State Machine) برای مدیریت وضعیت هر کاربر
-
 import json
-import os
-
+import database as db
 
 class StateMachine:
     def __init__(self):
@@ -28,20 +24,11 @@ class StateMachine:
     def reset(self, user_id):
         uid = str(user_id)
         self._states[uid] = "IDLE"
-        if uid in self._data:
-            del self._data[uid]
+        self._data.pop(uid, None)
 
     def save(self, filepath):
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        data = {"states": self._states, "data": self._data}
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        for uid in self._states:
+            db.save_state(uid, self._states[uid], self._data.get(uid, {}))
 
     def load(self, filepath):
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            self._states = data.get("states", {})
-            self._data = data.get("data", {})
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
+        self._states, self._data = db.load_all_states()

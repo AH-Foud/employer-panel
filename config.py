@@ -12,13 +12,7 @@ BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
 
 # مسیر فایل‌های ذخیره‌سازی
 DATA_DIR = "data"
-REQUESTS_FILE = f"{DATA_DIR}/requests.json"
-STATES_FILE = f"{DATA_DIR}/states.json"
-LOG_FILE = f"{DATA_DIR}/messages_log.json"
-FORWARD_MAP_FILE = f"{DATA_DIR}/forward_map.json"
-REGISTERED_FILE = f"{DATA_DIR}/registered_users.json"
-SOPS_FILE = f"{DATA_DIR}/sops.json"
-EMPLOYERS_FILE = f"{DATA_DIR}/employers.json"
+DATABASE_PATH = f"{DATA_DIR}/database.db"
 
 # تنظیمات وب سرور
 WEB_HOST = "127.0.0.1"

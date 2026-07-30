@@ -163,6 +163,10 @@ main_install() {
     cp -r "$DIR"/* "$INSTALL_DIR/" 2>/dev/null || true
     cd "$INSTALL_DIR"
 
+    # init database
+    info "Initializing database..."
+    python3 -c "import database; database.init_db()" 2>/dev/null || true
+
     info "Installing Python dependencies..."
     pip3 install -r requirements.txt --break-system-packages 2>/dev/null || pip3 install -r requirements.txt 2>/dev/null || true
 

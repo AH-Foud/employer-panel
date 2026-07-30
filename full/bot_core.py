@@ -6,6 +6,7 @@ import json, os, time, requests, config
 from state import StateMachine
 from analytics import Analytics
 import sync
+import database as db
 
 analytics = Analytics()
 state_machine = StateMachine()
@@ -13,7 +14,8 @@ state_machine = StateMachine()
 def init():
     os.makedirs(config.DATA_DIR, exist_ok=True)
     os.makedirs(config.VOICE_DIR, exist_ok=True)
-    state_machine.load(config.STATES_FILE)
+    db.init_db()
+    state_machine.load(None)
     analytics._ensure_file()
     # load data files into memory cache at startup
     _load_registered()
@@ -99,15 +101,10 @@ _registered_cache = {}
 
 def _load_registered():
     global _registered_cache
-    try:
-        with open(config.REGISTERED_FILE, "r", encoding="utf-8") as f:
-            _registered_cache = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        _registered_cache = {}
+    _registered_cache = db.load_all_registered()
 
 def _save_registered():
-    with open(config.REGISTERED_FILE, "w", encoding="utf-8") as f:
-        json.dump(_registered_cache, f, ensure_ascii=False, indent=2)
+    pass
 
 def load_registered():
     if not _registered_cache:
@@ -122,12 +119,12 @@ def register_user(user_id, first_name, phone):
         "first_name": first_name, "phone": phone,
         "registered_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
-    _save_registered()
+    db.register_user_db(user_id, first_name, phone, time.strftime("%Y-%m-%d %H:%M:%S"))
 
 def unregister_user(user_id):
     if str(user_id) in _registered_cache:
         del _registered_cache[str(user_id)]
-        _save_registered()
+        db.unregister_user_db(user_id)
         return True
     return False
 
@@ -137,15 +134,10 @@ _sops_cache = []
 
 def _load_sops():
     global _sops_cache
-    try:
-        with open(config.SOPS_FILE, "r", encoding="utf-8") as f:
-            _sops_cache = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        _sops_cache = []
+    _sops_cache = db.load_all_sops()
 
 def _save_sops():
-    with open(config.SOPS_FILE, "w", encoding="utf-8") as f:
-        json.dump(_sops_cache, f, ensure_ascii=False, indent=2)
+    pass
 
 def load_sops():
     if not _sops_cache:
@@ -153,8 +145,9 @@ def load_sops():
     return list(_sops_cache)
 
 def add_sop(name, response, keywords=""):
+    sop_id = db.add_sop_db(name, response, [k.strip() for k in keywords.split(",") if k.strip()])
     sop = {
-        "id": len(_sops_cache) + 1,
+        "id": sop_id,
         "name": name.strip(),
         "response": response.strip(),
         "keywords": [k.strip() for k in keywords.split(",") if k.strip()],
@@ -163,7 +156,6 @@ def add_sop(name, response, keywords=""):
         "use_count": 0
     }
     _sops_cache.append(sop)
-    _save_sops()
     sync.sync_sop(sop)
     return sop
 
@@ -174,7 +166,7 @@ def update_sop(sop_id, name=None, response=None, keywords=None, smart_enabled=No
             if response: s["response"] = response.strip()
             if keywords is not None: s["keywords"] = [k.strip() for k in keywords.split(",") if k.strip()]
             if smart_enabled is not None: s["smart_enabled"] = smart_enabled
-            _save_sops()
+            db.update_sop_db(sop_id, name, response, keywords, smart_enabled)
             return s
     return None
 
@@ -183,7 +175,7 @@ def delete_sop(sop_id):
     for i, s in enumerate(_sops_cache):
         if s["id"] == sop_id:
             _sops_cache.pop(i)
-            _save_sops()
+            db.delete_sop_db(sop_id)
             return True
     return False
 
@@ -217,15 +209,11 @@ _forward_map_cache = {}
 
 def _load_forward_map():
     global _forward_map_cache
-    try:
-        with open(config.FORWARD_MAP_FILE, "r", encoding="utf-8") as f:
-            _forward_map_cache = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        _forward_map_cache = {}
+    _forward_map_cache = db.load_all_forward_map()
 
 def _save_forward_map():
-    with open(config.FORWARD_MAP_FILE, "w", encoding="utf-8") as f:
-        json.dump(_forward_map_cache, f, ensure_ascii=False, indent=2)
+    for mid, val in _forward_map_cache.items():
+        db.save_forward_map_entry(mid, val["user_id"], val["first_name"])
 
 # ===================== کیبورد منو =====================
 
@@ -276,7 +264,7 @@ def forward_to_admin(chat_id, user_id, text, first_name):
         reply = f"📋 *{matched['name']}*\n\n{matched['response']}\n\n—‌—‌—‌—‌—‌—‌—\n💡 اگر جواب کاملی نگرفتید، دوباره پیام بدهید تا به کارفرما منتقل شود."
         send_message(chat_id, reply)
         matched["use_count"] = matched.get("use_count", 0) + 1
-        _save_sops()
+        db.increment_sop_use_count(matched["id"])
         analytics.log_admin_reply(user_id, first_name, f"🤖 پاسخ خودکار SOP: {matched['name']}\n{matched['response']}")
         send_message(config.ADMIN_ID, f"🤖 *SOP فعال شد:*\n👤 {first_name}\n📌 {matched['name']}\n📊 {matched['use_count']} بار")
         return
@@ -615,7 +603,7 @@ def process_update(update):
             analytics.log_admin_reply(user_id, first_name, f"[auto:{smart_sop['name']}] {reply_text}")
             sync.sync_message(user_id, first_name, f"[auto:{smart_sop['name']}] {reply_text}", time.strftime("%Y-%m-%d %H:%M:%S"))
             smart_sop["use_count"] = smart_sop.get("use_count", 0) + 1
-            _save_sops()
+            db.increment_sop_use_count(smart_sop["id"])
             return
 
     forward_to_admin(chat_id, user_id, text, first_name)

@@ -1,11 +1,8 @@
-# -*- coding: utf-8 -*-
-# هسته ربات بله - توابع اصلی بدون حلقه polling
-# این ماژول توسط web_server.py استفاده می‌شود
-
 import json, os, time, requests, config
 from state import StateMachine
 from analytics import Analytics
 import sync
+import database as db
 
 analytics = Analytics()
 state_machine = StateMachine()
@@ -13,9 +10,9 @@ state_machine = StateMachine()
 def init():
     os.makedirs(config.DATA_DIR, exist_ok=True)
     os.makedirs(config.VOICE_DIR, exist_ok=True)
-    state_machine.load(config.STATES_FILE)
+    db.init_db()
+    state_machine.load(None)
     analytics._ensure_file()
-    # load data files into memory cache at startup
     _load_registered()
     _load_sops()
     _load_employers()
@@ -112,15 +109,10 @@ _registered_cache = {}
 
 def _load_registered():
     global _registered_cache
-    try:
-        with open(config.REGISTERED_FILE, "r", encoding="utf-8") as f:
-            _registered_cache = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        _registered_cache = {}
+    _registered_cache = db.load_all_registered()
 
 def _save_registered():
-    with open(config.REGISTERED_FILE, "w", encoding="utf-8") as f:
-        json.dump(_registered_cache, f, ensure_ascii=False, indent=2)
+    pass
 
 def load_registered():
     if not _registered_cache:
@@ -135,12 +127,12 @@ def register_user(user_id, first_name, phone):
         "first_name": first_name, "phone": phone,
         "registered_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
-    _save_registered()
+    db.register_user_db(user_id, first_name, phone, time.strftime("%Y-%m-%d %H:%M:%S"))
 
 def unregister_user(user_id):
     if str(user_id) in _registered_cache:
         del _registered_cache[str(user_id)]
-        _save_registered()
+        db.unregister_user_db(user_id)
         return True
     return False
 
@@ -150,15 +142,10 @@ _sops_cache = []
 
 def _load_sops():
     global _sops_cache
-    try:
-        with open(config.SOPS_FILE, "r", encoding="utf-8") as f:
-            _sops_cache = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        _sops_cache = []
+    _sops_cache = db.load_all_sops()
 
 def _save_sops():
-    with open(config.SOPS_FILE, "w", encoding="utf-8") as f:
-        json.dump(_sops_cache, f, ensure_ascii=False, indent=2)
+    pass
 
 def load_sops():
     if not _sops_cache:
@@ -166,8 +153,9 @@ def load_sops():
     return list(_sops_cache)
 
 def add_sop(name, response, keywords=""):
+    sop_id = db.add_sop_db(name, response, [k.strip() for k in keywords.split(",") if k.strip()])
     sop = {
-        "id": len(_sops_cache) + 1,
+        "id": sop_id,
         "name": name.strip(),
         "response": response.strip(),
         "keywords": [k.strip() for k in keywords.split(",") if k.strip()],
@@ -176,7 +164,6 @@ def add_sop(name, response, keywords=""):
         "use_count": 0
     }
     _sops_cache.append(sop)
-    _save_sops()
     sync.sync_sop(sop)
     return sop
 
@@ -187,7 +174,7 @@ def update_sop(sop_id, name=None, response=None, keywords=None, smart_enabled=No
             if response: s["response"] = response.strip()
             if keywords is not None: s["keywords"] = [k.strip() for k in keywords.split(",") if k.strip()]
             if smart_enabled is not None: s["smart_enabled"] = smart_enabled
-            _save_sops()
+            db.update_sop_db(sop_id, name, response, keywords, smart_enabled)
             return s
     return None
 
@@ -196,14 +183,13 @@ def delete_sop(sop_id):
     for i, s in enumerate(_sops_cache):
         if s["id"] == sop_id:
             _sops_cache.pop(i)
-            _save_sops()
+            db.delete_sop_db(sop_id)
             return True
     return False
 
 # ===================== پاسخ هوشمند (کلمات کلیدی) =====================
 
 def find_smart_reply(text):
-    """بررسی پیام کاربر با کلمات کلیدی SOPها. در صورت تطابق، SOP مربوطه رو برمی‌گردونه"""
     text_lower = text.lower().strip()
     if not text_lower:
         return None
@@ -230,15 +216,10 @@ _employers_cache = []
 
 def _load_employers():
     global _employers_cache
-    try:
-        with open(config.EMPLOYERS_FILE, "r", encoding="utf-8") as f:
-            _employers_cache = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        _employers_cache = []
+    _employers_cache = db.load_all_employers()
 
 def _save_employers():
-    with open(config.EMPLOYERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(_employers_cache, f, ensure_ascii=False, indent=2)
+    pass
 
 def load_employers():
     if not _employers_cache:
@@ -248,17 +229,18 @@ def load_employers():
 def add_employer(name, admin_id, description=""):
     import random, string
     code = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    emp_id = db.add_employer_db(name, admin_id, description, code, now)
     employer = {
-        "id": len(_employers_cache) + 1,
+        "id": emp_id,
         "name": name.strip(),
         "admin_id": str(admin_id).strip(),
         "description": description.strip(),
         "code": code,
-        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "created_at": now,
         "active": True
     }
     _employers_cache.append(employer)
-    _save_employers()
     return employer
 
 def update_employer(emp_id, name=None, admin_id=None, description=None, active=None):
@@ -268,7 +250,7 @@ def update_employer(emp_id, name=None, admin_id=None, description=None, active=N
             if admin_id: e["admin_id"] = str(admin_id).strip()
             if description is not None: e["description"] = description.strip()
             if active is not None: e["active"] = active
-            _save_employers()
+            db.update_employer_db(emp_id, name, admin_id, description, active)
             return e
     return None
 
@@ -277,7 +259,7 @@ def delete_employer(emp_id):
     for i, e in enumerate(_employers_cache):
         if e["id"] == emp_id:
             _employers_cache.pop(i)
-            _save_employers()
+            db.delete_employer_db(emp_id)
             return True
     return False
 
@@ -296,7 +278,6 @@ def find_employer_by_admin_id(admin_id):
     return None
 
 def forward_to_employers(user_id, first_name, text, file_type=None, file_id=None):
-    """فوروارد پیام به همه کارفرمایان فعال"""
     employers = load_employers()
     phone = load_registered().get(str(user_id), {}).get("phone", "نامشخص")
     for emp in employers:
@@ -332,7 +313,7 @@ def regenerate_employer_code(emp_id):
     for e in _employers_cache:
         if e["id"] == emp_id:
             e["code"] = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-            _save_employers()
+            db.update_employer_code(emp_id, e["code"])
             return e["code"]
     return None
 
@@ -342,15 +323,11 @@ _forward_map_cache = {}
 
 def _load_forward_map():
     global _forward_map_cache
-    try:
-        with open(config.FORWARD_MAP_FILE, "r", encoding="utf-8") as f:
-            _forward_map_cache = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        _forward_map_cache = {}
+    _forward_map_cache = db.load_all_forward_map()
 
 def _save_forward_map():
-    with open(config.FORWARD_MAP_FILE, "w", encoding="utf-8") as f:
-        json.dump(_forward_map_cache, f, ensure_ascii=False, indent=2)
+    for mid, val in _forward_map_cache.items():
+        db.save_forward_map_entry(mid, val["user_id"], val["first_name"])
 
 # ===================== کیبورد منو =====================
 
@@ -382,7 +359,6 @@ def handle_contact(chat_id, user_id, first_name, contact):
     send_message(chat_id, f"✅ شماره تماس شما ثبت شد، {first_name} عزیز!\n\nاز این به بعد هر پیامی بفرستید، مستقیماً به کارفرما می‌رسد.", reply_markup=main_menu_keyboard())
 
 def forward_to_admin(chat_id, user_id, text, first_name):
-    """فوروارد پیام کاربر به ادمین (FIX: argument order corrected: text THEN first_name)"""
     analytics.log_message(user_id, first_name, text)
     sync.sync_message(user_id, first_name, text, time.strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -401,7 +377,7 @@ def forward_to_admin(chat_id, user_id, text, first_name):
         reply = f"📋 *{matched['name']}*\n\n{matched['response']}\n\n—‌—‌—‌—‌—‌—‌—\n💡 اگر جواب کاملی نگرفتید، دوباره پیام بدهید تا به کارفرما منتقل شود."
         send_message(chat_id, reply)
         matched["use_count"] = matched.get("use_count", 0) + 1
-        _save_sops()
+        db.increment_sop_use_count(matched["id"])
         analytics.log_admin_reply(user_id, first_name, f"🤖 پاسخ خودکار SOP: {matched['name']}\n{matched['response']}")
         send_message(config.ADMIN_ID, f"🤖 *SOP فعال شد:*\n👤 {first_name}\n📌 {matched['name']}\n📊 {matched['use_count']} بار")
         return
@@ -420,7 +396,6 @@ def forward_to_admin(chat_id, user_id, text, first_name):
     send_message(chat_id, "✅ پیام شما ارسال شد.\n📝 پیام بعدی را بنویسید...", reply_markup=main_menu_keyboard())
 
 def reply_to_user(user_id, text):
-    """ارسال پاسخ از ادمین (وب پنل) به کاربر"""
     if len(text.strip()) < 2:
         return False, "پیام خیلی کوتاه است"
     msg_text = f"📨 *پاسخ کارفرما:*\n\n{text.strip()}"
@@ -482,8 +457,6 @@ def reply_document_to_user(user_id, file_id_or_path):
     return False, "خطا"
 
 def reply_voice_to_user(user_id, voice_file_id_or_path):
-    """ارسال پیام صوتی از ادمین (وب پنل) به کاربر"""
-    # اگه فایل محلی باشه، اول آپلودش می‌کنیم
     if os.path.isfile(voice_file_id_or_path):
         file_path = voice_file_id_or_path
         url = f"{config.BASE_URL}/sendVoice"
@@ -499,7 +472,6 @@ def reply_voice_to_user(user_id, voice_file_id_or_path):
             return False, "خطا در ارسال فایل صوتی"
         except Exception as e:
             return False, f"خطا: {e}"
-    # مستقیم file_id
     result = send_voice(int(user_id), voice_file_id_or_path)
     if result:
         user_info = load_registered().get(str(user_id), {})
@@ -555,7 +527,6 @@ def reply_audio_to_user(user_id, file_id_or_path):
     return False, "خطا"
 
 def broadcast_message(targets, text):
-    """ارسال پیام همگانی"""
     if not targets:
         registered = load_registered()
         targets = list(registered.keys())
@@ -570,7 +541,6 @@ def broadcast_message(targets, text):
     return sent
 
 def broadcast_sop(sop_id, targets=None):
-    """ارسال SOP همگانی"""
     sops = load_sops()
     sop = next((s for s in sops if s["id"] == sop_id), None)
     if not sop:
@@ -591,7 +561,6 @@ def broadcast_sop(sop_id, targets=None):
 # ===================== پردازش آپدیت‌ها =====================
 
 def process_update(update):
-    """پردازش یک update از API بله"""
     if "message" not in update:
         return
 
@@ -601,7 +570,6 @@ def process_update(update):
     first_name = msg["from"].get("first_name", "کاربر")
     text = msg.get("text", "")
 
-    # -- هندل پاسخ ادمین به پیام فوروارد شده --
     if user_id == config.ADMIN_ID:
         if text and text.startswith("/start"):
             parts = text.split(maxsplit=1)
@@ -624,7 +592,6 @@ def process_update(update):
                 target = _forward_map_cache[reply_msg_id]
                 target_uid = target["user_id"]
                 target_name = target.get("first_name", "کاربر")
-                # اگر ادمین ویس فرستاده
                 if "voice" in msg:
                     voice = msg["voice"]
                     file_id = voice["file_id"]
@@ -635,7 +602,6 @@ def process_update(update):
                     else:
                         send_message(chat_id, f"⚠️ خطا در ارسال پیام صوتی به {target_name}")
                     return
-                # اگر ادمین عکس فرستاده
                 if "photo" in msg:
                     photos = msg["photo"]
                     file_id = photos[-1]["file_id"]
@@ -646,7 +612,6 @@ def process_update(update):
                     else:
                         send_message(chat_id, f"⚠️ خطا در ارسال عکس به {target_name}")
                     return
-                # اگر ادمین فایل فرستاده
                 if "document" in msg:
                     doc = msg["document"]
                     file_id = doc["file_id"]
@@ -667,7 +632,6 @@ def process_update(update):
                 return
         return
 
-    # پیام‌های کاربران عادی
     if text and text.startswith("/start"):
         parts = text.split(maxsplit=1)
         payload = parts[1] if len(parts) > 1 else ""
@@ -696,7 +660,6 @@ def process_update(update):
             handle_start(chat_id, user_id, first_name)
         return
 
-    # هندل دکمه‌های منو
     if text == "📞 اطلاعات تماس":
         phone = load_registered().get(str(user_id), {}).get("phone", "ثبت نشده")
         send_message(chat_id, f"📞 *شماره تماس ثبت شده شما:*\n\n{phone}\n\nبرای تغییر شماره با ادمین تماس بگیرید.", reply_markup=main_menu_keyboard())
@@ -705,7 +668,6 @@ def process_update(update):
         send_message(chat_id, "📝 *متن پیام خود را بنویسید...*\n\nهر چیزی که می‌خواید به کارفرما بگید، تایپ کنید و بفرستید.", reply_markup=main_menu_keyboard())
         return
 
-    # هندل ویس دریافتی از کاربر (یک درخواست با کپشن)
     if "voice" in msg:
         voice = msg["voice"]
         file_id = voice["file_id"]
@@ -724,7 +686,6 @@ def process_update(update):
         send_message(chat_id, "✅ پیام صوتی شما ارسال شد.\n📝 پیام بعدی را بنویسید...", reply_markup=main_menu_keyboard())
         return
 
-    # هندل عکس دریافتی از کاربر (یک درخواست با کپشن کامل)
     if "photo" in msg:
         photos = msg["photo"]
         file_id = photos[-1]["file_id"]
@@ -745,7 +706,6 @@ def process_update(update):
         send_message(chat_id, "✅ عکس شما ارسال شد.\n📝 پیام بعدی را بنویسید...", reply_markup=main_menu_keyboard())
         return
 
-    # هندل فایل دریافتی از کاربر (یک درخواست با کپشن)
     if "document" in msg:
         doc = msg["document"]
         file_id = doc["file_id"]
@@ -764,7 +724,6 @@ def process_update(update):
         send_message(chat_id, "✅ فایل شما ارسال شد.\n📝 پیام بعدی را بنویسید...", reply_markup=main_menu_keyboard())
         return
 
-    # ===== پاسخ هوشمند: بررسی کلمات کلیدی =====
     if text:
         smart_sop = find_smart_reply(text)
         if smart_sop:
@@ -773,7 +732,7 @@ def process_update(update):
             analytics.log_admin_reply(user_id, first_name, f"[auto:{smart_sop['name']}] {reply_text}")
             sync.sync_message(user_id, first_name, f"[auto:{smart_sop['name']}] {reply_text}", time.strftime("%Y-%m-%d %H:%M:%S"))
             smart_sop["use_count"] = smart_sop.get("use_count", 0) + 1
-            _save_sops()
+            db.increment_sop_use_count(smart_sop["id"])
             return
 
     forward_to_admin(chat_id, user_id, text, first_name)
