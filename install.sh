@@ -238,7 +238,6 @@ EOF
 install_subdomain() {
     echo ""
     read -rp "Subdomain (e.g. bot.example.com): " DOMAIN
-    read -rp "Email for SSL certificate: " SSL_EMAIL
     IP=$(curl -s ifconfig.me || curl -s icanhazip.com)
     FINAL_URL="https://$DOMAIN"
     echo "$FINAL_URL" > "$INSTALL_DIR/url.txt"
@@ -263,7 +262,7 @@ install_subdomain() {
     # get SSL via acme.sh standalone
     info "Getting SSL certificate from Let's Encrypt..."
     if ! command -v acme.sh &>/dev/null; then
-        curl https://get.acme.sh | sh -s email="$SSL_EMAIL" 2>/dev/null
+        curl https://get.acme.sh | sh 2>/dev/null
         source ~/.bashrc 2>/dev/null || true
     fi
 
