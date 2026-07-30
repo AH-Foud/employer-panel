@@ -294,6 +294,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <title>پنل مدیریت ربات بله</title>
 <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
 <script>var t=localStorage.getItem('zaro-theme');if(t)document.documentElement.setAttribute('data-theme',t);var a=localStorage.getItem('zaro-accent');if(a)document.documentElement.setAttribute('data-accent',a);</script>
+<script>var BASE=typeof __BASE_PATH__ !== 'undefined' ? __BASE_PATH__ : '';</script>
 <style>
 :root {
   --bg-primary: #121216;
@@ -1960,6 +1961,7 @@ select.form-input { cursor: pointer; appearance: none; background-image: url("da
 
   // ========== API HELPER ==========
   function api(path, method, body) {
+    path = BASE + path;
     method = method || 'GET';
     var opts = { method: method, headers: { 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
@@ -2188,7 +2190,7 @@ select.form-input { cursor: pointer; appearance: none; background-image: url("da
       audio._playing = false;
       btn.textContent = '▶'; btn.classList.remove('playing');
     });
-    audio.src = '/api/voice-proxy/' + fileId;
+    audio.src = BASE + '/api/voice-proxy/' + fileId;
     window._audioPlayers[fileId] = audio;
     audio._playing = true;
     btn.textContent = '⏸';
@@ -2216,12 +2218,12 @@ select.form-input { cursor: pointer; appearance: none; background-image: url("da
             var pMatch2 = m.text.match(/\[photo:([^\]]+)\]/);
             if (pMatch2) {
               var cap2 = m.text.replace(/\[photo:[^\]]+\]\s*/, '');
-              html += '<div class="msg-bubble msg-outgoing"><a href="/api/voice-proxy/' + pMatch2[1] + '" target="_blank"><img class="msg-image" src="/api/voice-proxy/' + pMatch2[1] + '" alt="photo" loading="lazy"></a>' + (cap2 ? '<div style="margin-top:6px;font-size:12px;">' + escHtml(cap2) + '</div>' : '') + '<div class="msg-time">' + timeStr + '</div></div>';
+              html += '<div class="msg-bubble msg-outgoing"><a href="' + BASE + '/api/voice-proxy/' + pMatch2[1] + '" target="_blank"><img class="msg-image" src="' + BASE + '/api/voice-proxy/' + pMatch2[1] + '" alt="photo" loading="lazy"></a>' + (cap2 ? '<div style="margin-top:6px;font-size:12px;">' + escHtml(cap2) + '</div>' : '') + '<div class="msg-time">' + timeStr + '</div></div>';
             } else { html += '<div class="msg-bubble msg-outgoing">🖼 عکس<div class="msg-time">' + timeStr + '</div></div>'; }
           } else if (m.text.indexOf('[document:') !== -1) {
             var dMatch2 = m.text.match(/\[document:([^\]]+)\]/);
             if (dMatch2) {
-              html += '<div class="msg-bubble msg-outgoing"><a class="msg-file" href="/api/voice-proxy/' + dMatch2[1] + '" target="_blank"><svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg><span class="file-name">فایل</span> 📥</a><div class="msg-time">' + timeStr + '</div></div>';
+              html += '<div class="msg-bubble msg-outgoing"><a class="msg-file" href="' + BASE + '/api/voice-proxy/' + dMatch2[1] + '" target="_blank"><svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg><span class="file-name">فایل</span> 📥</a><div class="msg-time">' + timeStr + '</div></div>';
             } else { html += '<div class="msg-bubble msg-outgoing">📎 فایل<div class="msg-time">' + timeStr + '</div></div>'; }
           } else {
             html += '<div class="msg-bubble msg-outgoing">' + escHtml(m.text) + '<div class="msg-time">' + timeStr + '</div></div>';
@@ -2241,13 +2243,13 @@ select.form-input { cursor: pointer; appearance: none; background-image: url("da
             var pMatch = m.text.match(/\[photo:([^\]]+)\]/);
             if (pMatch) {
               var cap = m.text.replace(/\[photo:[^\]]+\]\s*/, '');
-              html += '<div class="msg-bubble msg-incoming"><a href="/api/voice-proxy/' + pMatch[1] + '" target="_blank"><img class="msg-image" src="/api/voice-proxy/' + pMatch[1] + '" alt="photo" loading="lazy"></a>' + (cap ? '<div style="margin-top:6px;font-size:12px;">' + escHtml(cap) + '</div>' : '') + '<div class="msg-time">' + timeStr + '</div></div>';
+              html += '<div class="msg-bubble msg-incoming"><a href="' + BASE + '/api/voice-proxy/' + pMatch[1] + '" target="_blank"><img class="msg-image" src="' + BASE + '/api/voice-proxy/' + pMatch[1] + '" alt="photo" loading="lazy"></a>' + (cap ? '<div style="margin-top:6px;font-size:12px;">' + escHtml(cap) + '</div>' : '') + '<div class="msg-time">' + timeStr + '</div></div>';
             } else { html += '<div class="msg-bubble msg-incoming">🖼 عکس<div class="msg-time">' + timeStr + '</div></div>'; }
           } else if (m.text.indexOf('[document:') !== -1) {
             var dMatch = m.text.match(/\[document:([^\]]+)\]/);
             if (dMatch) {
               var fname = m.text.replace(/\[document:[^\]]+\]\s*/, '') || 'فایل';
-              html += '<div class="msg-bubble msg-incoming"><a class="msg-file" href="/api/voice-proxy/' + dMatch[1] + '" target="_blank"><svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg><span class="file-name">' + escHtml(fname.slice(0,40)) + '</span> 📥</a><div class="msg-time">' + timeStr + '</div></div>';
+              html += '<div class="msg-bubble msg-incoming"><a class="msg-file" href="' + BASE + '/api/voice-proxy/' + dMatch[1] + '" target="_blank"><svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg><span class="file-name">' + escHtml(fname.slice(0,40)) + '</span> 📥</a><div class="msg-time">' + timeStr + '</div></div>';
             } else { html += '<div class="msg-bubble msg-incoming">📎 فایل<div class="msg-time">' + timeStr + '</div></div>'; }
           } else {
             html += '<div class="msg-bubble msg-incoming">' + escHtml(m.text) + '<div class="msg-time">' + timeStr + '</div></div>';
@@ -2323,7 +2325,7 @@ select.form-input { cursor: pointer; appearance: none; background-image: url("da
         formData.append('voice', blob, 'voice_' + Date.now() + '.webm');
         recordBtn.textContent = '⏳';
         recordBtn.disabled = true;
-        fetch('/api/upload-voice', { method: 'POST', body: formData }).then(function(r) {
+        fetch(BASE + '/api/upload-voice', { method: 'POST', body: formData }).then(function(r) {
           if (!r.ok) throw new Error('خطا');
           return r.json();
         }).then(function() {
@@ -2366,7 +2368,7 @@ select.form-input { cursor: pointer; appearance: none; background-image: url("da
         var btn = $('btn-attach-file');
         btn.textContent = '⏳';
         btn.disabled = true;
-        fetch('/api/upload-file', { method: 'POST', body: formData }).then(function(r) {
+        fetch(BASE + '/api/upload-file', { method: 'POST', body: formData }).then(function(r) {
           if (!r.ok) throw new Error('err');
           return r.json();
         }).then(function() {
@@ -2754,7 +2756,8 @@ select.form-input { cursor: pointer; appearance: none; background-image: url("da
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
-    return HTMLResponse(content=DASHBOARD_HTML)
+    html = DASHBOARD_HTML.replace('"__BASE_PATH__"', json.dumps(config.SECRET_PATH))
+    return HTMLResponse(content=html)
 
 @app.get("/health")
 async def health():

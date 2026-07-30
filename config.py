@@ -17,6 +17,7 @@ DATABASE_PATH = f"{DATA_DIR}/database.db"
 # تنظیمات وب سرور
 WEB_HOST = "127.0.0.1"
 WEB_PORT = 5000
+SECRET_PATH = ""
 
 # ===================== همگام‌سازی با سایت =====================
 SYNC_BASE_URL = ""
