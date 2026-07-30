@@ -245,7 +245,7 @@ ADMIN_ID = {admin_id}
 BASE_URL = f"https://tapi.bale.ai/bot{{BOT_TOKEN}}"
 DATA_DIR = "data"
 DATABASE_PATH = f"{{DATA_DIR}}/database.db"
-WEB_HOST = "127.0.0.1"
+WEB_HOST = "0.0.0.0"
 WEB_PORT = 5000
 SECRET_PATH = "{secret}"
 SYNC_BASE_URL = ""
@@ -435,7 +435,7 @@ server {
     }
 
     location $SECRET_PATH/ {
-        proxy_pass http://127.0.0.1:5000/;
+        proxy_pass http://$IP:5000/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
