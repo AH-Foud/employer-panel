@@ -68,7 +68,7 @@ show_url() {
     echo ""
     if [ -f "$DIR/url.txt" ]; then echo -e "${GREEN}Panel URL:${NC} $(cat $DIR/url.txt)"
     else
-        IP=$(curl -s ifconfig.me || curl -s icanhazip.com)
+        IP=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || curl -s --max-time 5 https://checkip.amazonaws.com 2>/dev/null || hostname -I | awk '{print $1}')
         echo -e "${YELLOW}Try: http://$IP:5000${NC}"
     fi
     echo ""; read -rp "Press Enter..." x; show_menu
@@ -157,7 +157,7 @@ main_install() {
     fi
 
     info "Installing required packages..."
-    apt update -y && apt install -y python3 python3-pip python3-venv curl wget git nginx socat 2>/dev/null || true
+    apt update -y && apt install -y python3 python3-pip python3-venv curl wget git nginx socat dnsutils 2>/dev/null || true
 
     mkdir -p "$INSTALL_DIR"
     cp -r "$DIR"/* "$INSTALL_DIR/" 2>/dev/null || true
@@ -202,7 +202,7 @@ main_install() {
 }
 
 install_direct_ip() {
-    IP=$(curl -s ifconfig.me || curl -s icanhazip.com)
+    IP=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || curl -s --max-time 5 https://checkip.amazonaws.com 2>/dev/null || hostname -I | awk '{print $1}')
     FINAL_URL="http://$IP:5000"
     echo "$FINAL_URL" > "$INSTALL_DIR/url.txt"
     ok "Server IP: $IP"
@@ -238,7 +238,7 @@ EOF
 install_subdomain() {
     echo ""
     read -rp "Subdomain (e.g. bot.example.com): " DOMAIN
-    IP=$(curl -s ifconfig.me || curl -s icanhazip.com)
+    IP=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || curl -s --max-time 5 https://checkip.amazonaws.com 2>/dev/null || hostname -I | awk '{print $1}')
     FINAL_URL="https://$DOMAIN"
     echo "$FINAL_URL" > "$INSTALL_DIR/url.txt"
 
