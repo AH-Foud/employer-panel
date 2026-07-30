@@ -256,24 +256,53 @@ install_subdomain() {
         if [ "$confirm" != "y" ]; then exit 1; fi
     fi
 
-    # stop nginx temporarily if running on port 80
+    # stop anything on port 80
     systemctl stop nginx 2>/dev/null || true
+    systemctl stop apache2 2>/dev/null || true
+    fuser -k 80/tcp 2>/dev/null || true
+    sleep 1
+
+    # install socat (required by acme.sh)
+    apt install -y socat 2>/dev/null || true
+
+    # ensure port 80 is open in firewall
+    ufw allow 80/tcp 2>/dev/null || true
+    firewall-cmd --add-port=80/tcp --permanent 2>/dev/null || true
+    firewall-cmd --reload 2>/dev/null || true
 
     # get SSL via acme.sh standalone
     info "Getting SSL certificate from Let's Encrypt..."
     if ! command -v acme.sh &>/dev/null; then
-        curl https://get.acme.sh | sh 2>/dev/null
+        curl -s https://get.acme.sh | sh
         source ~/.bashrc 2>/dev/null || true
     fi
+    ~/.acme.sh/acme.sh --upgrade --auto-upgrade 2>/dev/null || true
 
-    if ~/.acme.sh/acme.sh --issue --standalone -d "$DOMAIN" --force --log 2>/dev/null; then
+    # detect if IPv6-only
+    ACME_LISTEN=""
+    if ! curl -s --max-time 3 https://api.ipify.org 2>/dev/null | grep -q '\.'; then
+        ACME_LISTEN="--listen-v6"
+    fi
+
+    # set CA and issue certificate
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt --force 2>/dev/null
+    if ~/.acme.sh/acme.sh --issue -d "$DOMAIN" $ACME_LISTEN --standalone --httpport 80 --force --log 2>/dev/null; then
         ok "SSL certificate obtained"
     else
-        # try with port 80 manually
-        warn "Trying with standalone on port 80..."
-        ~/.acme.sh/acme.sh --issue --standalone --httpport 80 -d "$DOMAIN" --force --log 2>/dev/null || {
-            err "SSL failed. Make sure port 80 is open and $DOMAIN points to this server"
-            err "Then run: ~/.acme.sh/acme.sh --issue --standalone -d $DOMAIN"
+        warn "First attempt failed. Trying again (port 80 may need a moment)..."
+        sleep 2
+        fuser -k 80/tcp 2>/dev/null || true
+        sleep 1
+        ~/.acme.sh/acme.sh --issue -d "$DOMAIN" $ACME_LISTEN --standalone --httpport 80 --force --log 2>/dev/null || {
+            err "SSL certificate issuance failed."
+            echo -e "${YELLOW}Check these:${NC}"
+            echo -e "  1. Make sure $DOMAIN A record points to this server IP"
+            echo -e "  2. Port 80 is open in your firewall (ufw/firewalld/iptables)"
+            echo -e "  3. No other service using port 80 (check: ss -tlnp | grep 80)"
+            echo -e ""
+            echo -e "${YELLOW}Fix and run manually:${NC}"
+            echo -e "  ~/.acme.sh/acme.sh --issue -d $DOMAIN --standalone --httpport 80 --force"
+            echo -e "  ~/.acme.sh/acme.sh --install-cert -d $DOMAIN --key-file /etc/ssl/employer-panel/key.pem --fullchain-file /etc/ssl/employer-panel/fullchain.pem"
             exit 1
         }
     fi
@@ -281,7 +310,11 @@ install_subdomain() {
     mkdir -p /etc/ssl/employer-panel
     ~/.acme.sh/acme.sh --install-cert -d "$DOMAIN" \
         --key-file /etc/ssl/employer-panel/key.pem \
-        --fullchain-file /etc/ssl/employer-panel/fullchain.pem
+        --fullchain-file /etc/ssl/employer-panel/fullchain.pem \
+        --reloadcmd "systemctl restart nginx"
+    chmod 600 /etc/ssl/employer-panel/key.pem
+    chmod 644 /etc/ssl/employer-panel/fullchain.pem
+    ~/.acme.sh/acme.sh --install-cronjob 2>/dev/null || true
     ok "SSL certificate installed"
 
     # configure nginx
